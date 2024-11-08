@@ -1,0 +1,10 @@
+^C:\USERS\ABHI\DESKTOP\CODE\MCMC_PYBIND11\BUILD\CMAKEFILES\541B68C2AE2ACD04D17D3EF3E47D4002\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Abhi/Desktop/Code/mcmc_pybind11 -BC:/Users/Abhi/Desktop/Code/mcmc_pybind11/build --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file C:/Users/Abhi/Desktop/Code/mcmc_pybind11/build/mcmc_pybind11.sln
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

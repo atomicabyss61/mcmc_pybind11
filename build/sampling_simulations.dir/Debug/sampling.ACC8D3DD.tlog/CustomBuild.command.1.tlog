@@ -1,0 +1,10 @@
+^C:\USERS\ABHI\DESKTOP\CODE\MCMC_PYBIND11\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" -SC:/Users/Abhi/Desktop/Code/mcmc_pybind11 -BC:/Users/Abhi/Desktop/Code/mcmc_pybind11/build --check-stamp-file C:/Users/Abhi/Desktop/Code/mcmc_pybind11/build/CMakeFiles/generate.stamp
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
