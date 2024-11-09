@@ -18,7 +18,6 @@ namespace mc_simulations
         int k,
         int samples);
 
-    int simple_add(int i, int j);
 }
 
 #endif
