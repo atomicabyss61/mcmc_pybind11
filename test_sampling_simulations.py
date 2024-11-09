@@ -1,18 +1,21 @@
 import sys
 sys.path.append('C:/Users/Abhi/Desktop/Code/mcmc_pybind11/build/debug')
 import sampling_simulations
+import matplotlib.pyplot as plt
+import math
 
 def sampling_dist(x: float) -> float:
-    print("in py: sampling_dist")
-    return pow(x, 3) / 3
+    return math.sin(x)
 
 def unif_pmf(x: float) -> float:
-    print("in py: unif_pmf")
-    return 1
+    return 1/math.pi
 
 def unif_sampler(x: float) -> float:
-    print("in py: unif_sampler")
-    return x
+    return math.pi*x
 
-result = sampling_simulations.rejection_sampling(sampling_dist, unif_pmf, unif_sampler, 1, 100)
-print(result)
+samples = 1000000
+result = sampling_simulations.rejection_sampling(sampling_dist, unif_pmf, unif_sampler, 5, samples)
+t = list(range(samples))
+print("in python printing")
+plt.hist(result, bins = 50, alpha=0.7)
+plt.show()

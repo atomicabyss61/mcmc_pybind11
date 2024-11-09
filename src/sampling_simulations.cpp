@@ -1,11 +1,12 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/functional.h>
 #include <pybind11/stl.h>
+#include <pybind11/embed.h>
 #include "sampling_simulations.h"
 
 namespace py = pybind11;
 
-#define SAMPLES_PER_ITERATION 100
+#define SAMPLES_PER_ITERATION 500
 
 namespace mc_simulation
 {
@@ -25,9 +26,11 @@ namespace mc_simulation
     {
         while (!finished_sampling)
         {
-            std::vector<double> generated_samples(SAMPLES_PER_ITERATION, 0.0);
-            // std::cout << "in generate proposals"
+            std::vector<double> generated_samples;
+            generated_samples.reserve(SAMPLES_PER_ITERATION);
+
             {
+
                 pybind11::gil_scoped_acquire acquire;
                 for (int i = 0; i < SAMPLES_PER_ITERATION; i++)
                 {
@@ -35,34 +38,21 @@ namespace mc_simulation
                     double prop_sample = proposal_sample_generator(unif_sample);
                     generated_samples.push_back(prop_sample);
                 }
+
+                pybind11::gil_scoped_release release;
             }
 
             {
-
                 std::unique_lock<std::mutex> lock(queue_mutex);
-                cond_var.wait(lock, [&s_queue]
-                              { return s_queue.size() < SAMPLES_PER_ITERATION || finished_sampling; });
+                cond_var.wait(lock, []
+                              { return true; });
                 for (double sample : generated_samples)
                 {
                     s_queue.push(sample);
                 }
+
                 cond_var.notify_one();
             }
-
-            // std::cout << "In generate_proposal_samples" << '\n';
-            // for (int i = 0; i < SAMPLES_PER_ITERATION; i++)
-            // {
-            //     std::cout << "retrieving sample!" << '\n';
-            //     double unif_sample = dis(gen);
-            //     std::cout << "unif sample: " << unif_sample << '\n';
-            //     std::cout << "checking gil state: " << PyGILState_Check() << '\n';
-            //     pybind11::gil_scoped_acquire acquire;
-            //     std::cout << "gil acquired" << '\n';
-            //     double prop_sample = proposal_sample_generator(unif_sample);
-            //     std::cout << "prop_sample: " << prop_sample << '\n';
-            //     s_queue.push(prop_sample);
-            //     std::cout << "sample retrieved!" << '\n';
-            // }
         }
     }
 
@@ -73,10 +63,11 @@ namespace mc_simulation
                               std::function<double(double)> &sample_distribution, std::function<double(double)> &proposal_distribution,
                               std::vector<double> &total_samples, int samples, int k)
     {
-        for (int samples_found = 0; samples_found < samples; i++)
+
+        while (total_samples.size() < samples)
         {
-            std::vector<double> rem_samples(SAMPLES_PER_ITERATION, 0.0);
-            int added_idx = 0;
+            std::vector<double> rem_samples;
+            rem_samples.reserve(SAMPLES_PER_ITERATION);
             {
                 std::unique_lock<std::mutex> lock(queue_mutex);
                 cond_var.wait(lock, [&s_queue]
@@ -90,32 +81,34 @@ namespace mc_simulation
                 for (int i = 0; i < SAMPLES_PER_ITERATION && !s_queue.empty(); i++)
                 {
                     double sample = s_queue.front();
+
                     s_queue.pop();
-                    rem_samples[i] = sample;
-                    added_idx++;
+                    rem_samples.push_back(sample);
                 }
+
                 cond_var.notify_one();
             }
 
-            std::vector<double> accepted_samples(SAMPLES_PER_ITERATION, 0.0);
-            int accepted_idx = 0;
+            std::vector<double> accepted_samples;
+            accepted_samples.reserve(SAMPLES_PER_ITERATION);
             {
                 pybind11::gil_scoped_acquire acquire;
-                for (int i = 0; i < added_idx; i++)
+                for (double sample : rem_samples)
                 {
-                    double proposed_sample = rem_samples[i];
-                    if (sample_distribution(proposed_sample) / (k * proposal_distribution(proposed_sample)) <= dis(gen))
+                    if (sample_distribution(sample) / (k * proposal_distribution(sample)) >= dis(gen))
                     {
-                        accepted_samples[i] = proposed_sample;
-                        accepted_idx++;
+                        accepted_samples.push_back(sample);
                     }
                 }
+                pybind11::gil_scoped_release release;
             }
-
-            for (int j = 0; j < accepted_idx; j++)
+            for (double acc_sample : accepted_samples)
             {
-                total_samples[samples_found] = accepted_samples[j];
-                samples_found++;
+                total_samples.push_back(acc_sample);
+                if (total_samples.size() >= samples - 1)
+                {
+                    break;
+                }
             }
         }
 
@@ -137,13 +130,17 @@ namespace mc_simulation
         std::queue<double> sample_queue;
 
         // plug values into f(x)/(k*g(x)) sequentially until we have the required samples
-        std::cout << "Launching threads!" << '\n';
-        pybind11::initialize_interpreter();
-        std::vector<double> accepted_samples(samples, 0.0);
-        std::jthread t([&]()
-                       { generate_proposal_samples(sample_queue, queue_mutex, cond_var, proposal_sample_generator); });
-        std::jthread a([&]()
-                       { sample_accept_reject(sample_queue, queue_mutex, cond_var, sample_distribution, proposal_distribution, accepted_samples, samples, k); });
+        std::vector<double> accepted_samples;
+        accepted_samples.reserve(samples);
+
+        // main thread acquiring gil
+        pybind11::gil_scoped_release release;
+        std::thread producer(generate_proposal_samples, std::ref(sample_queue), std::ref(queue_mutex), std::ref(cond_var), std::ref(proposal_sample_generator));
+        std::thread consumer(sample_accept_reject, std::ref(sample_queue), std::ref(queue_mutex), std::ref(cond_var), std::ref(sample_distribution), std::ref(proposal_distribution), std::ref(accepted_samples), samples, k);
+
+        producer.join();
+        consumer.join();
+
         return accepted_samples;
     }
 
